@@ -14,6 +14,31 @@ O projeto foi projetado para ser **100% turnkey**: basta clonar ou baixar o repo
 
 ---
 
+## ⚡ Início Rápido com 1 Clique (Windows)
+
+Você pode configurar e rodar tudo automaticamente dando **duplo clique** no arquivo:
+```cmd
+setup_ambiente.bat
+```
+ou executando no terminal:
+```cmd
+.\setup_ambiente.bat
+```
+
+### O que o script faz:
+1. **Verifica o Python**: detecta se o Python já está instalado. Se não estiver, baixa automaticamente o **Python 3.11** oficial e instala em modo de usuário (*sem precisar de privilégios de administrador*).
+2. **Pergunta sobre o VS Code**: se o VS Code não for detectado, pergunta se você deseja baixá-lo e instalá-lo automaticamente para visualizar e editar o projeto.
+3. **Verifica a integridade dos arquivos**: gera automaticamente quaisquer arquivos de teste (`www/`), capturas para Wireshark (`capturas/`) e versão HTML do relatório (`RELATORIO.html`).
+4. **Abre um menu interativo**:
+   - `[1]` Rodar a bateria completa de 48 testes automatizados (`test_server.py`)
+   - `[2]` Iniciar o servidor HTTP/1.1 (`server.py`)
+   - `[3]` Rodar o benchmark comparativo C1 vs C2 (`benchmark.py`)
+   - `[4]` Abrir a pasta do projeto no VS Code (`code .`)
+   - `[5]` Visualizar o Relatório Técnico no navegador
+   - `[0]` Sair
+
+---
+
 ## 📁 Estrutura do Repositório
 
 ```text
