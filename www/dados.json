@@ -1,0 +1,11 @@
+{
+  "projeto": "Trabalho 1 - Redes de Computadores",
+  "disciplina": "Laboratorio de Redes de Computadores",
+  "instituicao": "PUCRS",
+  "protocolo": "HTTP/1.1",
+  "camada_transporte": "TCP",
+  "persistencia": true,
+  "timeout_ocioso_segundos": 5,
+  "concorrencia": "Multi-threaded",
+  "modos_teste": ["C1 (conexao nova)", "C2 (conexao persistente)"]
+}

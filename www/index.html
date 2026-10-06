@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Interoperabilidade - Servidor HTTP/1.1</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Laboratório de Redes de Computadores - PUCRS</h1>
+            <p class="subtitle">Trabalho 1: Servidor HTTP/1.1 sobre Sockets TCP</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="card intro">
+            <h2>Teste de Interoperabilidade</h2>
+            <p>Esta página foi projetada para validar a interoperabilidade entre grupos. O navegador requisita múltiplos recursos estáticos simultaneamente (HTML, CSS, JS, PNG, JPG, PDF e JSON), testando as conexões persistentes <strong>HTTP/1.1 (Keep-Alive)</strong>.</p>
+            <div class="status-box">
+                <span class="badge-success">Servidor Ativo</span>
+                <span>Porta e socket TCP operando com concorrência multi-thread</span>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>Arquivos e Tipos MIME</h3>
+                <ul class="file-list">
+                    <li><a href="style.css" target="_blank">CSS: style.css (text/css)</a></li>
+                    <li><a href="app.js" target="_blank">JavaScript: app.js (application/javascript)</a></li>
+                    <li><a href="dados.json" target="_blank">JSON: dados.json (application/json)</a></li>
+                    <li><a href="exemplo.txt" target="_blank">Texto: exemplo.txt (text/plain)</a></li>
+                    <li><a href="documento.pdf" target="_blank">PDF: documento.pdf (application/pdf)</a></li>
+                    <li><a href="subpasta/sub.html">Subdiretório: subpasta/sub.html</a></li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>Interatividade JavaScript (AJAX / Fetch)</h3>
+                <p>Clique no botão abaixo para requisitar <code>dados.json</code> dinamicamente na mesma conexão:</p>
+                <button id="btn-load" class="btn">Carregar Dados JSON</button>
+                <div id="json-result" class="code-block">Nenhum dado carregado ainda.</div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>Recursos Visuais Referenciados</h3>
+            <p>Carregamento simultâneo de imagens binárias no navegador:</p>
+            <div class="image-grid">
+                <div class="image-card">
+                    <h4>Imagem PNG (image/png)</h4>
+                    <img src="imagem.png" alt="Teste PNG" width="200" height="120">
+                </div>
+                <div class="image-card">
+                    <h4>Foto JPEG (image/jpeg)</h4>
+                    <img src="foto.jpg" alt="Teste JPEG" width="200" height="120">
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Servidor HTTP/1.1 Socket TCP &bull; Redes de Computadores &bull; PUCRS</p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

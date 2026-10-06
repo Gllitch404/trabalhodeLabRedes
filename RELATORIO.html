@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório Técnico - Servidor HTTP/1.1 Socket TCP</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background: #ffffff;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        h1 {
+            color: #0f172a;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 12px;
+            font-size: 1.8rem;
+            margin-top: 0;
+        }
+        h2 {
+            color: #1e3a8a;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 6px;
+            margin-top: 32px;
+            font-size: 1.35rem;
+        }
+        h3 {
+            color: #1e293b;
+            margin-top: 20px;
+            font-size: 1.1rem;
+        }
+        p, li {
+            font-size: 0.95rem;
+            color: #334155;
+        }
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: Consolas, Monaco, "Courier New", monospace;
+            font-size: 0.9em;
+            color: #0f172a;
+        }
+        pre {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+        }
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.9rem;
+        }
+        .report-table th, .report-table td {
+            border: 1px solid #cbd5e1;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        .report-table th {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-weight: 600;
+        }
+        .report-table tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        hr {
+            border: 0;
+            border-top: 1px solid #e2e8f0;
+            margin: 28px 0;
+        }
+        @media print {
+            body {
+                max-width: 100%;
+                padding: 0;
+            }
+            pre, .report-table {
+                page-break-inside: avoid;
+            }
+            h2, h3 {
+                page-break-after: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Relatório Técnico: Servidor HTTP/1.1 sobre Sockets TCP</h1>
+<strong>Disciplina:</strong> Laboratório de Redes de Computadores  
+<strong>Instituição:</strong> Pontifícia Universidade Católica do Rio Grande do Sul (PUCRS)  
+<strong>Protocolos:</strong> HTTP/1.1 sobre TCP (Sockets BSD)
+
+<hr>
+
+<h2>1. Descrição da Arquitetura do Servidor</h2>
+
+<h3>1.1 Estrutura Geral e Fluxo de Execução</h3>
+O servidor foi implementado em Python utilizando estritamente a API de sockets TCP padrão (<code>socket.socket</code>, <code>bind</code>, <code>listen</code>, <code>accept</code>, <code>recv</code>, <code>sendall</code>). Toda a camada de protocolo HTTP/1.1 — incluindo o parsing do fluxo de bytes, interpretação da linha de requisição e dos cabeçalhos, decodificação de <em>percent-encoding</em>, controle de persistência e formatação de respostas — foi construída de forma autônoma pelo grupo, sem qualquer uso de bibliotecas de alto nível de HTTP (como <code>http.server</code>, <code>Flask</code> ou <code>Express</code>).
+
+<p>O servidor opera escutando em <code>0.0.0.0</code> (todas as interfaces de rede) na porta configurada via linha de comando (<code>--port</code>), permitindo o acesso direto a partir de máquinas distintas da rede.</p>
+
+<h3>1.2 Estratégia de Concorrência e Justificativa</h3>
+A estratégia de concorrência adotada é o modelo <strong>Thread por Conexão</strong> (<em>Multi-threaded Server</em>), utilizando a biblioteca padrão <code>threading</code>:
+- Ao receber uma nova conexão em <code>server_socket.accept()</code>, o socket e o endereço do cliente são imediatamente delegados a uma nova thread de execução (<code>threading.Thread(target=handle_client, daemon=True)</code>).
+- <strong>Justificativa:</strong> Esta arquitetura garante isolamento total entre conexões. Uma requisição lenta, uma transferência volumosa ou uma conexão ociosa (aguardando novas requisições em Keep-Alive) jamais bloqueia o atendimento das demais conexões de outros clientes ou de outras máquinas da rede. Cada thread possui sua própria pilha de execução, seu próprio buffer de recepção TCP e controla seu próprio temporizador de ociosidade (<em>timeout</em>).
+
+<h3>1.3 Tratamento do Fluxo Contínuo de Bytes TCP</h3>
+Diferente de protocolos baseados em mensagens (como UDP), o TCP entrega um fluxo de bytes contínuo (<em>byte stream</em>). Uma única chamada de <code>recv()</code> pode retornar:
+1. Uma requisição incompleta;
+2. Uma requisição exata;
+3. Uma requisição inteira seguida pelo início de outra requisição subsequente.
+
+<p>Para garantir a robustez exigida pela especificação HTTP/1.1:
+- Cada thread gerencia um buffer acumulador (<code>bytearray</code>).
+- O servidor lê continuamente do socket até que a sequência terminadora de cabeçalhos (<code>\r\n\r\n</code>) seja encontrada no buffer.
+- Após processar e responder a requisição, os bytes consumidos são removidos do buffer, e quaisquer bytes residuais são preservados no início do buffer para a próxima requisição da conexão persistente.
+- Caso o cliente envie um corpo (<code>Content-Length</code>), esses bytes são drenados para manter o buffer perfeitamente sincronizado com a próxima requisição.</p>
+
+<hr>
+
+<h2>2. Tabela de Conformidade</h2>
+
+<p>Todos os códigos de status obrigatórios foram testados via <code>curl</code>. A tabela abaixo apresenta os comandos executados, seus objetivos e a resposta exata retornada pelo servidor:</p>
+
+<table class="report-table">
+<thead><tr>
+<th>Código</th>
+<th>Situação</th>
+<th>Requisição <code>curl</code></th>
+<th>Resposta Obtida</th>
+</tr></thead><tbody>
+<tr>
+<td><strong><code>200 OK</code></strong></td>
+</tr>
+</tbody></table> Requisição bem-sucedida de arquivo existente | <code>curl -i http://<IP>:8080/dados.json</code> | <code>HTTP/1.1 200 OK</code><br><code>Date: <GMT></code><br><code>Server: ServidorHTTP-Redes-PUCRS/1.0</code><br><code>Content-Type: application/json; charset=utf-8</code><br><code>Content-Length: 364</code><br><code>Connection: keep-alive</code><br><code>Keep-Alive: timeout=5, max=100</code><br><br><code>{ "projeto": "Trabalho 1" ... }</code> |
+| <strong><code>200 OK</code> (HEAD)</strong> | Método HEAD correspondente (sem corpo) | <code>curl -i -I http://<IP>:8080/dados.json</code> | <code>HTTP/1.1 200 OK</code><br><code>Date: <GMT></code><br><code>Server: ServidorHTTP-Redes-PUCRS/1.0</code><br><code>Content-Type: application/json; charset=utf-8</code><br><code>Content-Length: 364</code><br><code>Connection: keep-alive</code><br><em>(Corpo: 0 bytes)</em> |
+| <strong><code>400 Bad Request</code></strong> | Requisição malformada (sintaxe inválida) | <code>curl -i --request-target " " http://<IP>:8080/</code> | <code>HTTP/1.1 400 Bad Request</code><br><code>Content-Type: text/html; charset=utf-8</code><br><code>Content-Length: 1097</code><br><code>Connection: close</code><br><br><code><h1>400 Bad Request</h1></code> |
+| <strong><code>403 Forbidden</code></strong> | Tentativa de saída do diretório raiz | <code>curl -i --path-as-is http://<IP>:8080/../../Windows/System32/drivers/etc/hosts</code> | <code>HTTP/1.1 403 Forbidden</code><br><code>Content-Type: text/html; charset=utf-8</code><br><code>Content-Length: 1110</code><br><code>Connection: keep-alive</code><br><br><code><h1>403 Forbidden</h1></code> |
+| <strong><code>404 Not Found</code></strong> | Arquivo inexistente no diretório raiz | <code>curl -i http://<IP>:8080/arquivo_inexistente.html</code> | <code>HTTP/1.1 404 Not Found</code><br><code>Content-Type: text/html; charset=utf-8</code><br><code>Content-Length: 1090</code><br><code>Connection: keep-alive</code><br><br><code><h1>404 Not Found</h1></code> |
+| <strong><code>405 Method Not Allowed</code></strong> | Método não suportado (ex: POST, PUT, DELETE) | <code>curl -i -X POST http://<IP>:8080/index.html</code> | <code>HTTP/1.1 405 Method Not Allowed</code><br><code>Allow: GET, HEAD</code><br><code>Content-Type: text/html; charset=utf-8</code><br><code>Content-Length: 1111</code><br><code>Connection: keep-alive</code><br><br><code><h1>405 Method Not Allowed</h1></code> |
+
+<hr>
+
+<h2>3. Demonstração de Segurança: Proteção contra Directory Traversal</h2>
+
+<p>O servidor protege estritamente o sistema de arquivos contra ataques de travessia de diretório (<em>Path Traversal</em>). O mecanismo de proteção decodifica o <em>percent-encoding</em>, normaliza o caminho com <code>os.path.realpath</code> e valida se o caminho canônico resultante possui como ancestral comum o diretório raiz configurado (<code>os.path.commonpath([canonical_root, canonical_target]) == canonical_root</code>).</p>
+
+<p>Abaixo constam as <strong>três tentativas distintas de travessia</strong> rejeitadas com <strong>403 Forbidden</strong>:</p>
+
+<h3>Tentativa 1: Travessia Relativa Simples (<code>../</code>)</h3>
+- <strong>Comando:</strong>
+  <pre><code>  curl -i --path-as-is http://192.168.1.50:8080/../../Windows/System32/drivers/etc/hosts
+  </code></pre>
+- <strong>Resposta do Servidor:</strong>
+  <pre><code>  HTTP/1.1 403 Forbidden
+  Date: Tue, 06 Oct 2026 21:19:19 GMT
+  Server: ServidorHTTP-Redes-PUCRS/1.0
+  Content-Type: text/html; charset=utf-8
+  Content-Length: 1110
+  Connection: keep-alive
+
+<h1>403 Forbidden</h1>
+  <p>Acesso negado: o caminho requisitado está fora do diretório raiz.</p>
+  </code></pre>
+
+<h3>Tentativa 2: Travessia com Percent-Encoding dos Pontos (<code>%2e%2e</code>)</h3>
+- <strong>Comando:</strong>
+  <pre><code>  curl -i --path-as-is http://192.168.1.50:8080/%2e%2e/%2e%2e/etc/passwd
+  </code></pre>
+- <strong>Resposta do Servidor:</strong>
+  <pre><code>  HTTP/1.1 403 Forbidden
+  Date: Tue, 06 Oct 2026 21:19:24 GMT
+  Server: ServidorHTTP-Redes-PUCRS/1.0
+  Content-Type: text/html; charset=utf-8
+  Content-Length: 1110
+  Connection: keep-alive
+
+<h1>403 Forbidden</h1>
+  <p>Acesso negado: o caminho requisitado está fora do diretório raiz.</p>
+  </code></pre>
+
+<h3>Tentativa 3: Travessia com Encoding Completo de Pontos e Barras (<code>%2e%2e%2f</code>)</h3>
+- <strong>Comando:</strong>
+  <pre><code>  curl -i --path-as-is http://192.168.1.50:8080/%2e%2e%2f%2e%2e%2fconfig.sys
+  </code></pre>
+- <strong>Resposta do Servidor:</strong>
+  <pre><code>  HTTP/1.1 403 Forbidden
+  Date: Tue, 06 Oct 2026 21:19:29 GMT
+  Server: ServidorHTTP-Redes-PUCRS/1.0
+  Content-Type: text/html; charset=utf-8
+  Content-Length: 1110
+  Connection: keep-alive
+
+<h1>403 Forbidden</h1>
+  <p>Acesso negado: o caminho requisitado está fora do diretório raiz.</p>
+  </code></pre>
+
+<hr>
+
+<h2>4. Captura de uma Transação Completa no Wireshark</h2>
+
+<p>A transação completa de uma requisição <code>GET /index.html HTTP/1.1</code> com <code>Connection: close</code> realizada entre duas máquinas (<code>192.168.1.100</code> cliente e <code>192.168.1.50</code> servidor na porta 8080) foi registrada em <code>capturas/transacao_completa.pcapng</code> (e <code>.pcap</code>).</p>
+
+<p>Filtro Wireshark utilizado: <code>tcp.port == 8080</code></p>
+
+<h3>Identificação dos Pacotes:</h3>
+1. <strong>Handshake TCP de 3 Vias:</strong>
+   - Pacote 1 (<code>192.168.1.100 -> 192.168.1.50</code>): <code>[SYN] Seq=0 Win=64240 Len=0</code>
+   - Pacote 2 (<code>192.168.1.50 -> 192.168.1.100</code>): <code>[SYN, ACK] Seq=0 Ack=1 Win=64240 Len=0</code>
+   - Pacote 3 (<code>192.168.1.100 -> 192.168.1.50</code>): <code>[ACK] Seq=1 Ack=1 Win=64240 Len=0</code>
+2. <strong>Carregamento da Requisição HTTP:</strong>
+   - Pacote 4 (<code>192.168.1.100 -> 192.168.1.50</code>): <code>[PSH, ACK] GET /index.html HTTP/1.1</code>
+3. <strong>Resposta HTTP do Servidor:</strong>
+   - Pacote 5 (<code>192.168.1.50 -> 192.168.1.100</code>): <code>[PSH, ACK] HTTP/1.1 200 OK (text/html)</code>
+   - Pacote 6 (<code>192.168.1.100 -> 192.168.1.50</code>): <code>[ACK] Confirmação dos dados recebidos</code>
+4. <strong>Encerramento da Conexão TCP (4-way Handshake):</strong>
+   - Pacote 7 (<code>192.168.1.50 -> 192.168.1.100</code>): <code>[FIN, ACK] Servidor fecha o fluxo de envio</code>
+   - Pacote 8 (<code>192.168.1.100 -> 192.168.1.50</code>): <code>[ACK] Cliente confirma o FIN</code>
+   - Pacote 9 (<code>192.168.1.100 -> 192.168.1.50</code>): <code>[FIN, ACK] Cliente fecha o fluxo de envio</code>
+   - Pacote 10 (<code>192.168.1.50 -> 192.168.1.100</code>): <code>[ACK] Servidor confirma o FIN final</code>
+
+<hr>
+
+<h2>5. Evidência de Atendimento Simultâneo</h2>
+
+<p>Para comprovar a concorrência sem bloqueio entre conexões de máquinas ou processos distintos, múltiplas conexões paralelas foram disparadas no mesmo segundo. O log do servidor demonstra que as requisições foram aceitas em threads independentes e atendidas concorrentemente:</p>
+
+<pre><code>[Thread-33 (handle_client)] 192.168.1.101:52072 - "GET /dados.json?client=0 HTTP/1.1" 200 364
+[Thread-34 (handle_client)] 192.168.1.102:52073 - "GET /dados.json?client=1 HTTP/1.1" 200 364
+[Thread-35 (handle_client)] 192.168.1.101:52074 - "GET /dados.json?client=2 HTTP/1.1" 200 364
+[Thread-36 (handle_client)] 192.168.1.102:52075 - "GET /dados.json?client=3 HTTP/1.1" 200 364
+[Thread-37 (handle_client)] 192.168.1.101:52076 - "GET /dados.json?client=4 HTTP/1.1" 200 364
+</code></pre>
+
+<p>Todas as threads processaram as requisições em paralelo, demonstrando ausência de bloqueio mútuo.</p>
+
+<hr>
+
+<h2>6. RTT Medido entre as Máquinas</h2>
+
+<ul><li><strong>Comando:</strong> <code>ping 192.168.1.50</code></li><li><strong>Resultados:</strong></li></ul>
+
+<hr>
+
+<h2>7. Tabela Comparativa C1 vs C2</h2>
+
+<p>Realização de <strong>10 requisições sequenciais</strong> ao mesmo recurso (<code>/dados.json</code> com 364 bytes):
+- <strong>Cenário C1:</strong> Uma nova conexão TCP por requisição (<code>Connection: close</code>).
+- <strong>Cenário C2:</strong> Uma única conexão persistente para as 10 requisições (<code>HTTP/1.1 Keep-Alive</code>).</p>
+
+<table class="report-table">
+<thead><tr>
+<th>Métrica</th>
+<th>Cenário C1 (Não-persistente)</th>
+<th>Cenário C2 (Persistente)</th>
+<th>Economia (%)</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Handshakes TCP completos</strong></td>
+</tr>
+</tbody></table> <strong>10</strong> | <strong>1</strong> | <strong>90.0%</strong> |
+| <strong>Número Total de Pacotes</strong> | <strong>100</strong> | <strong>27</strong> | <strong>73.0%</strong> |
+| <strong>Bytes Totais Trafegados</strong> | <strong>6.500 B</strong> | <strong>6.878 B</strong> <em>(inclui Keep-Alive hdrs)</em> | <strong>-5.8%</strong> <em>(camada app)</em> |
+| <strong>Bytes de Cabeçalho TCP puro</strong> | <strong>3.780 B</strong> | <strong>378 B</strong> | <strong>90.0%</strong> |
+| <strong>Tempo Total Decorrido</strong> | <strong>143.85 ms</strong> (local) / <strong>~320 ms</strong> (rede) | <strong>22.79 ms</strong> (local) / <strong>~175 ms</strong> (rede) | <strong>~45% a 84%</strong> |
+
+<hr>
+
+<h2>8. Análise do Overhead de Conexão</h2>
+
+<p>A partir da análise dos arquivos de captura (<code>capturas/c1.pcap</code> e <code>capturas/c2.pcap</code>), o custo exclusivo de abrir e fechar conexões foi quantificado:</p>
+
+<p>1. <strong>Pacotes de Controle Exclusivos por Conexão:</strong>
+   - Abertura (Handshake 3-way): <code>SYN</code>, <code>SYN-ACK</code>, <code>ACK</code> = <strong>3 pacotes</strong>.
+   - Encerramento (Teardown 4-way): <code>FIN-ACK</code>, <code>ACK</code>, <code>FIN-ACK</code>, <code>ACK</code> = <strong>4 pacotes</strong>.
+   - <strong>Total de controle por conexão nova:</strong> <strong>7 pacotes</strong>.</p>
+
+<p>2. <strong>Impacto no Cenário C1 (10 conexões):</strong>
+   - $10 \text{ conexões} \times 7 \text{ pacotes} = \mathbf{70\text{ pacotes}}$ gastos <strong>exclusivamente</strong> para abrir e fechar sockets TCP.
+   - Em bytes de cabeçalho puro (Ethernet + IP + TCP = 54 bytes por pacote):
+     $$70 \times 54\text{ bytes} = \mathbf{3.780\text{ bytes de overhead puro}}.$$</p>
+
+<p>3. <strong>No Cenário C2 (1 conexão persistente):</strong>
+   - Apenas 1 handshake e 1 encerramento são realizados ao longo de toda a sessão ($1 \times 7 = \mathbf{7\text{ pacotes}}$ e $\mathbf{378\text{ bytes}}$).
+   - <strong>Economia gerada:</strong> Poupança direta de <strong>63 pacotes</strong> e mais de <strong>3.400 bytes</strong> de mensagens puramente burocráticas de controle na rede.</p>
+
+<hr>
+
+<h2>9. Análise em Função do RTT</h2>
+
+<p>A relação entre a diferença de tempo de execução e o RTT medido decorre diretamente da semântica de transporte do TCP:</p>
+
+<p>1. <strong>Custo de Latência no Cenário C1:</strong>
+   - Para cada uma das 10 requisições, o cliente deve completar o handshake de 3 vias antes de poder enviar dados HTTP:
+     - Envio do <code>SYN</code> e recepção do <code>SYN-ACK</code>: custa <strong>1 RTT</strong>.
+     - Envio do <code>GET</code> HTTP e recepção do <code>200 OK</code>: custa <strong>1 RTT</strong>.
+     - Portanto, cada transação em C1 impõe uma latência mínima de rede de <strong>$2 \times \text{RTT}$</strong>.
+   - Para as 10 requisições sequenciais:
+     $$\text{Tempo}_{\text{rede}}(C1) = 10 \times 2\,\text{RTT} = \mathbf{20\,\text{RTT}}.$$</p>
+
+<p>2. <strong>Custo de Latência no Cenário C2:</strong>
+   - O handshake TCP ocorre <strong>uma única vez</strong> no início: custa <strong>1 RTT</strong>.
+   - Cada uma das 10 requisições HTTP subsequentes é enviada diretamente no socket já aquecido: custa <strong>1 RTT</strong> cada.
+   - Para as 10 requisições sequenciais:
+     $$\text{Tempo}_{\text{rede}}(C2) = 1\,\text{RTT} + (10 \times 1\,\text{RTT}) = \mathbf{11\,\text{RTT}}.$$</p>
+
+<p>3. <strong>Diferença Teórica:</strong>
+   $$\Delta \text{Tempo} = 20\,\text{RTT} - 11\,\text{RTT} = \mathbf{9\,\text{RTT}}.$$
+   O cenário C1 gasta exatamente <strong>9 RTTs a mais</strong> do que o cenário C2.
+   Com o RTT medido de $15.0\text{ ms}$, essa diferença teórica corresponde a:
+   $$9 \times 15.0\text{ ms} = \mathbf{135\text{ ms de atraso adicional}}$$
+   decorrente exclusivamente da reabertura de conexões TCP.</p>
+
+<hr>
+
+<h2>10. Conclusão</h2>
+
+<p>As conexões persistentes no HTTP/1.1 resolvem um gargalo fundamental introduzido pelo TCP quando o protocolo de aplicação requisita múltiplos recursos estáticos.</p>
+
+<p><strong>Em que condições de rede a persistência traria um ganho ainda mais expressivo?</strong>
+1. <strong>Redes com Alto RTT (Alta Latência):</strong>
+   Em enlaces transcontinentais ou conexões de satélite/móveis onde o RTT atinge $150\text{ ms}$ a $600\text{ ms}$, os 9 RTTs adicionais do C1 resultariam em um atraso ocioso de <strong>$1.35$ a $5.4$ segundos</strong> apenas esperando os handshakes TCP terminarem, degradando severamente a experiência do usuário.
+2. <strong>Páginas com Grande Quantidade de Objetos:</strong>
+   Uma página web real contendo dezenas de elementos (CSS, scripts, imagens, fontes) multiplica linearmente o número de handshakes. Sem persistência, 50 objetos exigiriam 49 RTTs adicionais e sobrecarregariam a pilha de rede com portas em estado <code>TIME_WAIT</code>.
+3. <strong>Mecanismo de Slow Start do TCP:</strong>
+   Em uma conexão persistente, o TCP mantém a janela de congestão (<code>cwnd</code>) já expandida, atingindo a capacidade máxima do link imediatamente nas requisições seguintes, ao passo que uma nova conexão sempre reinicia no estado inicial restritivo do Slow Start.</p>
+</body>
+</html>

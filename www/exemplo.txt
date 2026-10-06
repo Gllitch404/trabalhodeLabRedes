@@ -1,0 +1,10 @@
+Laboratório de Redes de Computadores - PUCRS
+Trabalho 1: Servidor HTTP/1.1 sobre sockets TCP
+
+Este arquivo de texto (.txt) é servido com o Content-Type: text/plain; charset=utf-8.
+Todos os requisitos da especificação foram cumpridos:
+1. Conexão persistente (HTTP/1.1 Keep-Alive)
+2. Proteção contra Directory Traversal
+3. Resposta correta a métodos GET e HEAD
+4. Rejeição de outros métodos com 405 Method Not Allowed e cabeçalho Allow: GET, HEAD
+5. Concorrência com atendimento de múltiplas conexões simultâneas.
